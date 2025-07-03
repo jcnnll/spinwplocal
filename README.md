@@ -26,7 +26,7 @@ Before installing, ensure the following are installed and configured:
 
 #### PHP 8.0 Workaround
 
-Using (Laravel Valet)[https://laravel.com/docs/12.x/valet] the PHP deprecated warnings can be resolved by
+Using [Laravel Valet](https://laravel.com/docs/12.x/valet) the PHP deprecated warnings can be resolved by
 using Valet to download and build PHP 8.0:
 
 ```bash
