@@ -1,0 +1,117 @@
+#!/bin/sh
+# vim: filetype=sh
+
+# -------- Colors --------
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+NONE=$(tput sgr0)
+
+# -------- Resolve script path and load .env --------
+SCRIPT_SOURCE="${BASH_SOURCE:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink "$SCRIPT_SOURCE" || echo "$SCRIPT_SOURCE")")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/.env"
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo "${RED}Error:${NONE} .env file not found at $ENV_FILE"
+  echo "Please create it using 'cp .env.example .env' and configure your settings."
+  exit 1
+fi
+
+set -a
+. "$ENV_FILE"
+set +a
+
+# -------- Parse Args --------
+SITE="$1"
+USER="${DEFAULT_USER}"
+PASS="${DEFAULT_PASS}"
+EMAIL="${DEFAULT_EMAIL}"
+
+if [ -z "$SITE" ]; then
+  echo "${RED}Error:${NONE} No site name provided."
+  echo "Usage: wplocalup <sitename>"
+  exit 1
+fi
+
+SITE_PATH="${SITES_PATH}/${SITE}"
+
+# -------- Check for Existing Site --------
+if [ -d "$SITE_PATH" ]; then
+  echo "${YELLOW}Warning:${NONE} Site '${SITE}' already exists at ${SITE_PATH}."
+  exit 1
+fi
+
+# -------- Create Site --------
+cd "$SITES_PATH" || {
+  echo "${RED}Error:${NONE} Could not change directory to $SITES_PATH"
+  exit 1
+}
+
+$PHP_BIN "$(which wp)" valet new "$SITE" \
+  --locale="$WP_LOCALE" \
+  --dbname="wp_${SITE}" \
+  --dbuser="$DB_USER" \
+  --dbpass="$DB_PASS" \
+  --admin_user="$USER" \
+  --admin_password="$PASS" \
+  --admin_email="$EMAIL"
+
+cd "$SITE_PATH" || {
+  echo "${RED}Error:${NONE} Could not enter site directory: $SITE_PATH"
+  exit 1
+}
+
+# -------- Recreate wp-config.php with custom PHP settings --------
+wp config create \
+  --dbname="wp_${SITE}" \
+  --dbuser="$DB_USER" \
+  --dbpass="$DB_PASS" \
+  --skip-check \
+  --force \
+  --extra-php <<PHP
+define( 'WP_DEBUG', $WP_DEBUG );
+define( 'WP_DEBUG_LOG', $WP_DEBUG_LOG );
+define( 'WP_DEBUG_DISPLAY', $WP_DEBUG_DISPLAY );
+@ini_set( 'display_errors', 0 );
+define( 'WP_MEMORY_LIMIT', '$WP_MEMORY_LIMIT' );
+set_time_limit( $WP_TIMEOUT );
+PHP
+
+# -------- Cleanup WP Defaults --------
+wp theme delete twentytwentythree twentytwentyfour > /dev/null 2>&1
+wp plugin delete akismet hello > /dev/null 2>&1
+
+# -------- Set Site Settings --------
+SITE_TITLE=$(echo "$SITE" | tr '-' ' ' | awk '{ for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2)); print }')
+wp option update blogname "$SITE_TITLE" > /dev/null 2>&1
+wp rewrite structure '/%postname%/' --hard > /dev/null 2>&1
+
+# -------- Git Setup (Local Only) --------
+cat <<EOF > .gitignore
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/upgrade/
+*.log
+
+# Node/npm
+node_modules/
+npm-debug.log
+
+# OS
+.DS_Store
+Thumbs.db
+EOF
+
+git init > /dev/null
+git add . > /dev/null
+git commit -m "Initial commit for ${SITE}" > /dev/null
+
+# -------- Output --------
+echo
+echo "${GREEN}✔ Your new WordPress site is ready.${NONE}"
+echo "${YELLOW}Front-end${NONE}: https://${SITE}.test/"
+echo "${YELLOW}Back-end${NONE}: https://${SITE}.test/wp-admin/"
+echo "${YELLOW}Username${NONE}: ${USER}"
+echo "${YELLOW}Password${NONE}: ${PASS}"

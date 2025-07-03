@@ -1,0 +1,47 @@
+#!/bin/sh
+# vim: filetype=sh
+
+# -------- Default Config --------
+BIN_DIR="${HOME}/.local/bin"    # Where to symlink executables this location must be in you PATH
+ENV_FILE=".env"                 # Env file name in repo folder
+ENV_EXAMPLE_FILE=".env.example" # Example env file
+SCRIPTS="wplocalup wplocaldown"
+
+# -------- Colors --------
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+NONE=$(tput sgr0)
+
+# -------- Copy Env File --------
+if [ ! -f .env ]; then
+  cp .env.example .env
+  echo "${GREEN}.env file created from .env.example${NONE}"
+else
+  echo "${YELLOW}.env file already exists, skipping copy${NONE}"
+fi
+
+# -------- Provision Deploy Location --------
+if [ ! -d "$BIN_DIR" ]; then
+  echo "${YELLOW}Directory $BIN_DIR does not exist. Creating it...${NONE}"
+  mkdir -p "$BIN_DIR" || {
+    echo "${RED}Failed to create directory $BIN_DIR. Exiting.${NONE}"
+    exit 1
+  }
+  echo "${GREEN}Created directory $BIN_DIR${NONE}"
+fi
+
+# -------- Set Executable Permissions and Symlink --------
+for script in $SCRIPTS; do
+  if [ -f "$script" ]; then
+    chmod +x "$script"
+    ln -sf "$PWD/$script" "$BIN_DIR/$script"
+    echo "${GREEN}✔ $script is now executable and symlinked to $BIN_DIR${NONE}"
+  else
+    echo "${RED}✖ $script not found, skipping${NONE}"
+  fi
+done
+
+echo
+echo "${YELLOW}⚠️  Please review and customize your '$ENV_FILE' file with your environment-specific settings.${NONE}"
+echo "${YELLOW}    See '$ENV_EXAMPLE_FILE' for examples and guidance.${NONE}"
